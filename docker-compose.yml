@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # База данных PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: students_db
+    environment:
+      # Переменные из .env файла
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      # Проброс порта: внешний:внутренний
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      # Сохранение данных БД на хосте
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - students_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI приложение
+  app:
+    build: .
+    container_name: students_api
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Переменные окружения для приложения
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db  # Имя сервиса БД
+      POSTGRES_PORT: 5432
+    volumes:
+      # Монтируем код для автоперезагрузки
+      - .:/app
+    networks:
+      - students_network
+
+# Именованный volume для данных PostgreSQL
+volumes:
+  postgres_data:
+
+# Сеть для связи контейнеров
+networks:
+  students_network:
+    driver: bridge
